@@ -136,3 +136,6 @@ Available through `window.api`:
 ## License
 
 MIT
+
+
+## Thanks for viewing my files :3
