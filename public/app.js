@@ -17,6 +17,8 @@ let userSettings = {
   autoSync: true,
   syncInterval: 30
 };
+let selectedFile = null;
+let dmContact = null;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -37,7 +39,6 @@ function loadSettings() {
 }
 
 function saveSettings() {
-  // Get values from UI
   userSettings.soundEnabled = document.getElementById('soundEnabled')?.checked ?? true;
   userSettings.desktopNotifs = document.getElementById('desktopNotifs')?.checked ?? true;
   userSettings.mentionOnly = document.getElementById('mentionOnly')?.checked ?? false;
@@ -51,23 +52,16 @@ function saveSettings() {
 }
 
 function applySettings() {
-  // Apply theme
   document.body.setAttribute('data-theme', userSettings.theme);
-  
-  // Apply font size
   document.body.setAttribute('data-font-size', userSettings.fontSize);
-  
-  // Apply accent color
   document.documentElement.style.setProperty('--primary', userSettings.accentColor);
   
-  // Apply compact mode
   if (userSettings.compactMode) {
     document.body.classList.add('compact-mode');
   } else {
     document.body.classList.remove('compact-mode');
   }
   
-  // Update UI elements if settings modal is open
   const themeSelect = document.getElementById('themeSelect');
   const fontSizeSelect = document.getElementById('fontSizeSelect');
   const accentColorInput = document.getElementById('accentColor');
@@ -78,7 +72,6 @@ function applySettings() {
 }
 
 function showSettings() {
-  // Populate settings modal with current values
   document.getElementById('themeSelect').value = userSettings.theme;
   document.getElementById('accentColor').value = userSettings.accentColor;
   document.getElementById('fontSizeSelect').value = userSettings.fontSize;
@@ -95,6 +88,7 @@ function showSettings() {
     document.getElementById('profileDisplayName').value = currentUser.display_name || '';
   }
   
+  loadAvatar();
   document.getElementById('settingsModal').classList.add('active');
 }
 
@@ -120,13 +114,296 @@ function toggleCompactMode() {
 
 async function updateProfile() {
   const displayName = document.getElementById('profileDisplayName').value.trim();
-  const statusMessage = document.getElementById('statusMessage').value.trim();
   
   if (currentUser && displayName) {
-    // Update in database (you'd need to add this API)
     currentUser.display_name = displayName;
     document.getElementById('currentUsername').textContent = displayName;
   }
+}
+
+// Avatar Management
+function uploadAvatar() {
+  const input = document.getElementById('avatarUpload');
+  const file = input.files[0];
+  
+  if (!file) return;
+  
+  if (!file.type.startsWith('image/')) {
+    alert('Please select an image file');
+    return;
+  }
+  
+  if (file.size > 5 * 1024 * 1024) {
+    alert('Image must be less than 5MB');
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const avatarUrl = e.target.result;
+    
+    const preview = document.getElementById('avatarPreview');
+    preview.innerHTML = `<img src="${avatarUrl}" alt="Avatar">`;
+    
+    const mainAvatar = document.getElementById('userAvatar');
+    mainAvatar.style.backgroundImage = `url(${avatarUrl})`;
+    mainAvatar.style.backgroundSize = 'cover';
+    mainAvatar.textContent = '';
+    
+    if (currentUser) {
+      currentUser.avatar_url = avatarUrl;
+      localStorage.setItem(`avatar_${currentUser.id}`, avatarUrl);
+    }
+  };
+  
+  reader.readAsDataURL(file);
+}
+
+function removeAvatar() {
+  if (!currentUser) return;
+  
+  const preview = document.getElementById('avatarPreview');
+  const initial = (currentUser.display_name || currentUser.username).charAt(0).toUpperCase();
+  preview.innerHTML = `<span id="avatarPreviewText">${initial}</span>`;
+  
+  const mainAvatar = document.getElementById('userAvatar');
+  mainAvatar.style.backgroundImage = '';
+  mainAvatar.textContent = initial;
+  
+  localStorage.removeItem(`avatar_${currentUser.id}`);
+  currentUser.avatar_url = null;
+}
+
+function loadAvatar() {
+  if (!currentUser) return;
+  
+  const savedAvatar = localStorage.getItem(`avatar_${currentUser.id}`);
+  const initial = (currentUser.display_name || currentUser.username).charAt(0).toUpperCase();
+  
+  const mainAvatar = document.getElementById('userAvatar');
+  const preview = document.getElementById('avatarPreview');
+  
+  if (savedAvatar) {
+    mainAvatar.style.backgroundImage = `url(${savedAvatar})`;
+    mainAvatar.style.backgroundSize = 'cover';
+    mainAvatar.textContent = '';
+    
+    if (preview) {
+      preview.innerHTML = `<img src="${savedAvatar}" alt="Avatar">`;
+    }
+  } else {
+    mainAvatar.textContent = initial;
+    if (preview) {
+      preview.innerHTML = `<span id="avatarPreviewText">${initial}</span>`;
+    }
+  }
+}
+
+// File Sharing
+function attachFile() {
+  document.getElementById('fileInput').click();
+}
+
+function handleFileSelect() {
+  const input = document.getElementById('fileInput');
+  const file = input.files[0];
+  
+  if (!file) return;
+  
+  if (file.size > 25 * 1024 * 1024) {
+    alert('File must be less than 25MB');
+    return;
+  }
+  
+  selectedFile = file;
+  
+  const messageInput = document.getElementById('messageInput');
+  messageInput.placeholder = `📎 ${file.name} (${formatFileSize(file.size)}) - Type message or press Send`;
+  messageInput.style.borderColor = 'var(--primary)';
+}
+
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+async function sendFileMessage() {
+  if (!selectedFile || !currentRoom) return;
+  
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const fileData = {
+      name: selectedFile.name,
+      size: selectedFile.size,
+      type: selectedFile.type,
+      data: e.target.result
+    };
+    
+    const messageContent = document.getElementById('messageInput').value.trim() || `Sent ${selectedFile.name}`;
+    
+    const result = await window.api.sendMessage({
+      roomId: currentRoom.id,
+      userId: currentUser.id,
+      content: messageContent,
+      messageType: 'file',
+      fileData: JSON.stringify(fileData)
+    });
+    
+    if (result.success) {
+      selectedFile = null;
+      document.getElementById('messageInput').value = '';
+      document.getElementById('messageInput').placeholder = 'Type a message...';
+      document.getElementById('messageInput').style.borderColor = '';
+      document.getElementById('fileInput').value = '';
+      await loadMessages();
+    }
+  };
+  
+  reader.readAsDataURL(selectedFile);
+}
+
+function getFileIcon(type) {
+  if (type.includes('pdf')) return '📄';
+  if (type.includes('word') || type.includes('document')) return '📝';
+  if (type.includes('sheet') || type.includes('excel')) return '📊';
+  if (type.includes('video')) return '🎥';
+  if (type.includes('audio')) return '🎵';
+  if (type.includes('zip') || type.includes('rar')) return '🗜️';
+  return '📎';
+}
+
+function downloadFile(data, filename) {
+  const link = document.createElement('a');
+  link.href = data;
+  link.download = filename;
+  link.click();
+}
+
+// Direct Messaging
+function showDMModal(contact) {
+  dmContact = contact;
+  document.getElementById('dmContactName').textContent = contact.display_name || contact.username;
+  document.getElementById('dmModal').classList.add('active');
+}
+
+async function createDM() {
+  if (!dmContact) return;
+  
+  console.log('Creating DM with contact:', dmContact);
+  
+  // Check if DM already exists between these two users
+  const existingDM = rooms.find(r => 
+    r.room_type === 'private' && 
+    r.name.includes(currentUser.username) && 
+    r.name.includes(dmContact.username)
+  );
+  
+  if (existingDM) {
+    console.log('Found existing DM:', existingDM);
+    closeModal('dmModal');
+    selectRoom(existingDM);
+    return;
+  }
+  
+  const roomName = `${currentUser.username} & ${dmContact.username}`;
+  
+  console.log('Creating new DM room:', roomName);
+  
+  const result = await window.api.createRoom({
+    name: roomName,
+    description: `Private conversation between ${currentUser.username} and ${dmContact.username}`,
+    roomType: 'private',
+    createdBy: currentUser.id
+  });
+  
+  console.log('Create room result:', result);
+  
+  if (result.success) {
+    console.log('Adding contact to room. Contact ID:', dmContact.id, 'Room ID:', result.room.id);
+    
+    // Add the contact as a member to the room
+    const joinResult = await window.api.joinRoom(dmContact.id, result.room.id);
+    console.log('Join room result:', joinResult);
+    
+    closeModal('dmModal');
+    await loadRooms();
+    
+    // Select the newly created DM
+    await new Promise(resolve => setTimeout(resolve, 300)); // Wait for rooms to load
+    const newRoom = rooms.find(r => r.id === result.room.id);
+    console.log('Found new room:', newRoom);
+    
+    if (newRoom) {
+      selectRoom(newRoom);
+    } else {
+      console.error('Could not find newly created room in rooms list');
+    }
+  } else {
+    alert('Failed to create DM: ' + result.error);
+  }
+}
+
+// Invite to Room
+function showInviteModal() {
+  if (!currentRoom) {
+    alert('Please select a room first');
+    return;
+  }
+  
+  document.getElementById('inviteRoomName').textContent = currentRoom.name;
+  
+  const container = document.getElementById('inviteContactsList');
+  container.innerHTML = '';
+  
+  contacts.forEach(contact => {
+    const item = document.createElement('div');
+    item.className = 'invite-item';
+    
+    const userAvatar = localStorage.getItem(`avatar_${contact.id}`);
+    const initial = (contact.display_name || contact.username).charAt(0).toUpperCase();
+    
+    const avatarStyle = userAvatar 
+      ? `style="background-image: url(${userAvatar}); background-size: cover;"` 
+      : '';
+    const avatarText = userAvatar ? '' : initial;
+    
+    item.innerHTML = `
+      <div class="invite-item-info">
+        <div class="invite-item-avatar" ${avatarStyle}>${avatarText}</div>
+        <div>
+          <div style="font-weight: 600;">${contact.display_name || contact.username}</div>
+          <div style="font-size: 12px; color: var(--text-muted);">@${contact.username}</div>
+        </div>
+      </div>
+      <input type="checkbox" data-contact-id="${contact.id}">
+    `;
+    
+    container.appendChild(item);
+  });
+  
+  document.getElementById('inviteModal').classList.add('active');
+}
+
+async function sendInvites() {
+  const checkboxes = document.querySelectorAll('#inviteContactsList input[type="checkbox"]:checked');
+  
+  if (checkboxes.length === 0) {
+    alert('Please select at least one contact to invite');
+    return;
+  }
+  
+  const invitePromises = Array.from(checkboxes).map(cb => {
+    const contactId = parseInt(cb.dataset.contactId);
+    return window.api.joinRoom(contactId, currentRoom.id);
+  });
+  
+  await Promise.all(invitePromises);
+  
+  closeModal('inviteModal');
+  alert(`Invited ${checkboxes.length} contact(s) to ${currentRoom.name}`);
 }
 
 function resetSettings() {
@@ -145,14 +422,13 @@ function resetSettings() {
       syncInterval: 30
     };
     saveSettings();
-    showSettings(); // Refresh modal
+    showSettings();
   }
 }
 
 function playNotificationSound() {
   if (!userSettings.soundEnabled) return;
   
-  // Simple beep using Web Audio API
   const audioContext = new (window.AudioContext || window.webkitAudioContext)();
   const oscillator = audioContext.createOscillator();
   const gainNode = audioContext.createGain();
@@ -187,11 +463,12 @@ function showDesktopNotification(title, body) {
   }
 }
 
-// Network listener
+// Network listener - adapts to your own network automatically
 function setupNetworkListener() {
   window.api.onLANServerStarted((info) => {
     networkInfo = info;
     showNetworkStatus(info);
+    console.log(`LAN Server bound to network: ${info.ip}`);
   });
   
   // Auto-sync with configurable interval
@@ -207,7 +484,7 @@ function showNetworkStatus(info) {
   const textEl = document.getElementById('networkStatusText');
   
   if (statusEl && textEl) {
-    textEl.textContent = `Connected to LAN (${info.ip}:${info.port})`;
+    textEl.textContent = `🌐 LAN (${info.ip}:${info.port})`;
     statusEl.style.display = 'flex';
   }
 }
@@ -291,11 +568,9 @@ async function showAppScreen() {
   document.getElementById('loginScreen').classList.remove('active');
   document.getElementById('appScreen').classList.add('active');
   
-  // Set user info
   document.getElementById('currentUsername').textContent = currentUser.display_name || currentUser.username;
-  document.getElementById('userAvatar').textContent = (currentUser.display_name || currentUser.username).charAt(0).toUpperCase();
+  loadAvatar();
   
-  // Load data
   await loadRooms();
   await loadContacts();
 }
@@ -326,9 +601,13 @@ function renderRooms() {
       item.classList.add('active');
     }
     
+    // Determine room icon
+    const isDM = room.room_type === 'private' && room.member_count === 2;
+    const icon = isDM ? '💬' : (room.room_type === 'private' ? '🔒' : '👥');
+    
     item.innerHTML = `
-      <div class="list-item-title">${room.name}</div>
-      <div class="list-item-subtitle">${room.member_count} members • ${room.room_type}</div>
+      <div class="list-item-title">${icon} ${room.name}</div>
+      <div class="list-item-subtitle">${room.member_count} ${room.member_count === 1 ? 'member' : 'members'} • ${room.room_type}</div>
     `;
     
     item.onclick = () => selectRoom(room);
@@ -339,15 +618,11 @@ function renderRooms() {
 async function selectRoom(room) {
   currentRoom = room;
   
-  // Update UI
   document.getElementById('currentRoomName').textContent = room.name;
   document.getElementById('messageInput').disabled = false;
   document.getElementById('sendButton').disabled = false;
   
-  // Highlight selected room
   renderRooms();
-  
-  // Load messages
   await loadMessages();
 }
 
@@ -363,6 +638,7 @@ async function loadMessages() {
 
 function renderMessages(messages) {
   const container = document.getElementById('messagesContainer');
+  const previousCount = container.children.length;
   container.innerHTML = '';
   
   messages.forEach(msg => {
@@ -375,7 +651,14 @@ function renderMessages(messages) {
     
     const avatar = document.createElement('div');
     avatar.className = 'message-avatar';
-    avatar.textContent = (msg.display_name || msg.username).charAt(0).toUpperCase();
+    
+    const userAvatar = localStorage.getItem(`avatar_${msg.user_id}`);
+    if (userAvatar) {
+      avatar.style.backgroundImage = `url(${userAvatar})`;
+      avatar.style.backgroundSize = 'cover';
+    } else {
+      avatar.textContent = (msg.display_name || msg.username).charAt(0).toUpperCase();
+    }
     
     const content = document.createElement('div');
     content.className = 'message-content';
@@ -385,12 +668,42 @@ function renderMessages(messages) {
       minute: '2-digit'
     });
     
+    const timestampHTML = userSettings.showTimestamps 
+      ? `<span class="message-time">${time}</span>` 
+      : '';
+    
+    let messageContent = '';
+    
+    if (msg.message_type === 'file' && msg.file_data) {
+      const fileData = JSON.parse(msg.file_data);
+      
+      if (fileData.type.startsWith('image/')) {
+        messageContent = `
+          <div class="message-text">${escapeHtml(msg.content)}</div>
+          <img src="${fileData.data}" class="message-image" onclick="window.open('${fileData.data}')" alt="${fileData.name}">
+        `;
+      } else {
+        messageContent = `
+          <div class="message-text">${escapeHtml(msg.content)}</div>
+          <div class="message-file" onclick="downloadFile('${fileData.data}', '${fileData.name}')">
+            <div class="message-file-icon">${getFileIcon(fileData.type)}</div>
+            <div class="message-file-info">
+              <div class="message-file-name">${fileData.name}</div>
+              <div class="message-file-size">${formatFileSize(fileData.size)}</div>
+            </div>
+          </div>
+        `;
+      }
+    } else {
+      messageContent = `<div class="message-text">${escapeHtml(msg.content)}</div>`;
+    }
+    
     content.innerHTML = `
       <div class="message-header">
         <span class="message-author">${msg.display_name || msg.username}</span>
-        <span class="message-time">${time}</span>
+        ${timestampHTML}
       </div>
-      <div class="message-text">${escapeHtml(msg.content)}</div>
+      ${messageContent}
     `;
     
     messageDiv.appendChild(avatar);
@@ -398,7 +711,21 @@ function renderMessages(messages) {
     container.appendChild(messageDiv);
   });
   
-  // Scroll to bottom
+  if (messages.length > previousCount) {
+    const newMessages = messages.slice(previousCount);
+    newMessages.forEach(msg => {
+      if (msg.user_id !== currentUser.id) {
+        playNotificationSound();
+        if (!userSettings.mentionOnly || msg.content.includes(`@${currentUser.username}`)) {
+          showDesktopNotification(
+            `${msg.display_name || msg.username} in ${currentRoom.name}`,
+            msg.content
+          );
+        }
+      }
+    });
+  }
+  
   container.scrollTop = container.scrollHeight;
 }
 
@@ -417,6 +744,11 @@ function setupMessageInput() {
 async function sendMessage() {
   if (!currentRoom) return;
   
+  if (selectedFile) {
+    await sendFileMessage();
+    return;
+  }
+  
   const input = document.getElementById('messageInput');
   const content = input.value.trim();
   
@@ -431,73 +763,7 @@ async function sendMessage() {
   if (result.success) {
     input.value = '';
     await loadMessages();
-    
-    // Play sound for own message (optional)
-    // playNotificationSound();
   }
-}
-
-// Modified renderMessages to add notifications
-function renderMessages(messages) {
-  const container = document.getElementById('messagesContainer');
-  const previousCount = container.children.length;
-  container.innerHTML = '';
-  
-  messages.forEach(msg => {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'message';
-    
-    if (msg.user_id === currentUser.id) {
-      messageDiv.classList.add('own');
-    }
-    
-    const avatar = document.createElement('div');
-    avatar.className = 'message-avatar';
-    avatar.textContent = (msg.display_name || msg.username).charAt(0).toUpperCase();
-    
-    const content = document.createElement('div');
-    content.className = 'message-content';
-    
-    const time = new Date(msg.created_at).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    
-    const timestampHTML = userSettings.showTimestamps 
-      ? `<span class="message-time">${time}</span>` 
-      : '';
-    
-    content.innerHTML = `
-      <div class="message-header">
-        <span class="message-author">${msg.display_name || msg.username}</span>
-        ${timestampHTML}
-      </div>
-      <div class="message-text">${escapeHtml(msg.content)}</div>
-    `;
-    
-    messageDiv.appendChild(avatar);
-    messageDiv.appendChild(content);
-    container.appendChild(messageDiv);
-  });
-  
-  // Notify for new messages (not own)
-  if (messages.length > previousCount) {
-    const newMessages = messages.slice(previousCount);
-    newMessages.forEach(msg => {
-      if (msg.user_id !== currentUser.id) {
-        playNotificationSound();
-        if (!userSettings.mentionOnly || msg.content.includes(`@${currentUser.username}`)) {
-          showDesktopNotification(
-            `${msg.display_name || msg.username} in ${currentRoom.name}`,
-            msg.content
-          );
-        }
-      }
-    });
-  }
-  
-  // Scroll to bottom
-  container.scrollTop = container.scrollHeight;
 }
 
 // Contacts
@@ -522,10 +788,28 @@ function renderContacts() {
   contacts.forEach(contact => {
     const item = document.createElement('div');
     item.className = 'list-item';
+    item.style.position = 'relative';
+    
+    // Get avatar
+    const userAvatar = localStorage.getItem(`avatar_${contact.id}`);
+    const initial = (contact.display_name || contact.username).charAt(0).toUpperCase();
+    
+    let avatarHTML = '';
+    if (userAvatar) {
+      avatarHTML = `<div class="contact-avatar" style="background-image: url(${userAvatar}); background-size: cover;"></div>`;
+    } else {
+      avatarHTML = `<div class="contact-avatar">${initial}</div>`;
+    }
     
     item.innerHTML = `
-      <div class="list-item-title">${contact.display_name || contact.username}</div>
-      <div class="list-item-subtitle">@${contact.username} • ${contact.status}</div>
+      ${avatarHTML}
+      <div class="contact-info">
+        <div class="list-item-title">${contact.display_name || contact.username}</div>
+        <div class="list-item-subtitle">@${contact.username} • ${contact.status}</div>
+      </div>
+      <div class="contact-actions">
+        <button class="contact-action-btn" onclick='event.stopPropagation(); showDMModal(${JSON.stringify(contact).replace(/'/g, "&#39;")})'>💬 Message</button>
+      </div>
     `;
     
     contactsList.appendChild(item);
@@ -627,7 +911,7 @@ async function addContact(contactId) {
   
   if (result.success) {
     await loadContacts();
-    searchUsers(); // Refresh search results
+    searchUsers();
   } else {
     alert(result.error);
   }
@@ -668,3 +952,4 @@ document.querySelectorAll('.modal').forEach(modal => {
     }
   });
 });
+// Mimi got fucked here
