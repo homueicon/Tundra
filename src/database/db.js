@@ -68,6 +68,7 @@ async function initialize() {
         user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
         content TEXT NOT NULL,
         message_type VARCHAR(20) DEFAULT 'text',
+        file_data TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         edited_at TIMESTAMP,
         is_deleted BOOLEAN DEFAULT false
@@ -243,6 +244,16 @@ async function createRoom(roomData) {
 
 async function joinRoom(userId, roomId) {
   try {
+    // Check if already a member
+    const existing = await pool.query(
+      'SELECT * FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [roomId, userId]
+    );
+    
+    if (existing.rows.length > 0) {
+      return { success: true, message: 'Already a member' };
+    }
+    
     await pool.query(
       'INSERT INTO room_members (room_id, user_id) VALUES ($1, $2)',
       [roomId, userId]
@@ -250,9 +261,6 @@ async function joinRoom(userId, roomId) {
     
     return { success: true };
   } catch (error) {
-    if (error.code === '23505') {
-      return { success: false, error: 'Already a member of this room' };
-    }
     return { success: false, error: error.message };
   }
 }
@@ -290,14 +298,14 @@ async function getMessages(roomId, limit = 100) {
 }
 
 async function sendMessage(messageData) {
-  const { roomId, userId, content, messageType } = messageData;
+  const { roomId, userId, content, messageType, fileData } = messageData;
   
   try {
     const result = await pool.query(
-      `INSERT INTO messages (room_id, user_id, content, message_type) 
-       VALUES ($1, $2, $3, $4) 
+      `INSERT INTO messages (room_id, user_id, content, message_type, file_data) 
+       VALUES ($1, $2, $3, $4, $5) 
        RETURNING *`,
-      [roomId, userId, content, messageType || 'text']
+      [roomId, userId, content, messageType || 'text', fileData || null]
     );
     
     return { success: true, message: result.rows[0] };
