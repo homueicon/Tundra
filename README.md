@@ -1,5 +1,4 @@
-# Web Client Application
-
+### LAN Web Client.
 A desktop chat application built with Electron, featuring rooms, contacts, and PostgreSQL database integration.
 
 ## Features
@@ -24,9 +23,10 @@ A desktop chat application built with Electron, featuring rooms, contacts, and P
 
 ## Setup Instructions
 
-### 1. Install Dependencies
+### 1. Install Dependencies + Cloning.
 
 ```bash
+git clone https://github.com/homueicon/Tundra
 npm install
 ```
 
