@@ -7,13 +7,13 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!--network status stuff -->
+  <!-- Network Status Indicator -->
   <div id="networkStatus" class="network-status" style="display: none;">
     <div class="status-dot"></div>
     <span id="networkStatusText">Connected to LAN</span>
   </div>
 
-  <!--login screen bored of making this-->
+  <!-- Login Screen -->
   <div id="loginScreen" class="screen active">
     <div class="login-container">
       <h1>Welcome</h1>
@@ -40,7 +40,7 @@
     </div>
   </div>
 
-  <!--already pro coder 40 lines pff-->
+  <!-- Main App Screen -->
   <div id="appScreen" class="screen">
     <div class="app-container">
       <!-- Sidebar -->
@@ -59,7 +59,7 @@
           <button class="sidebar-tab" onclick="showTab('contacts')">Contacts</button>
         </div>
 
-        <!--rooms for me and mimi tho :3 -->
+        <!-- Rooms List -->
         <div id="roomsTab" class="tab-content active">
           <div class="tab-header">
             <h3>Rooms</h3>
@@ -68,7 +68,7 @@
           <div id="roomsList" class="list"></div>
         </div>
 
-        <!--contacts-->
+        <!-- Contacts List -->
         <div id="contactsTab" class="tab-content">
           <div class="tab-header">
             <h3>Contacts</h3>
@@ -78,18 +78,21 @@
         </div>
       </div>
 
-      <!--chat something-->
+      <!-- Chat Area -->
       <div class="chat-area">
         <div class="chat-header">
           <h2 id="currentRoomName">Select a room</h2>
           <div class="chat-actions">
-            <button onclick="showRoomInfo()">ℹ️</button>
+            <button onclick="showInviteModal()" title="Invite members">👥</button>
+            <button onclick="showRoomInfo()" title="Room info">ℹ️</button>
           </div>
         </div>
 
         <div id="messagesContainer" class="messages-container"></div>
 
         <div class="message-input-container">
+          <button class="attach-btn" onclick="attachFile()" title="Attach file">📎</button>
+          <input type="file" id="fileInput" style="display: none;" onchange="handleFileSelect()">
           <input type="text" id="messageInput" placeholder="Type a message..." disabled>
           <button id="sendButton" onclick="sendMessage()" disabled>Send</button>
         </div>
@@ -97,7 +100,7 @@
     </div>
   </div>
 
-  <!-- room creat -->
+  <!-- Create Room Modal -->
   <div id="createRoomModal" class="modal">
     <div class="modal-content">
       <h2>Create Room</h2>
@@ -114,7 +117,7 @@
     </div>
   </div>
 
-  <!-- contact modal -->
+  <!-- Add Contact Modal -->
   <div id="addContactModal" class="modal">
     <div class="modal-content">
       <h2>Add Contact</h2>
@@ -126,13 +129,38 @@
     </div>
   </div>
 
-  <!-- setings -->
+  <!-- Invite to Room Modal -->
+  <div id="inviteModal" class="modal">
+    <div class="modal-content">
+      <h2>Invite to Room</h2>
+      <p>Select contacts to invite to <strong id="inviteRoomName"></strong></p>
+      <div id="inviteContactsList" class="invite-list"></div>
+      <div class="modal-actions">
+        <button onclick="sendInvites()">Send Invites</button>
+        <button onclick="closeModal('inviteModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Direct Message Modal -->
+  <div id="dmModal" class="modal">
+    <div class="modal-content">
+      <h2>Start Direct Message</h2>
+      <p>Create a private room with <strong id="dmContactName"></strong></p>
+      <div class="modal-actions">
+        <button onclick="createDM()">Start Chat</button>
+        <button onclick="closeModal('dmModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
   <div id="settingsModal" class="modal">
     <div class="modal-content settings-content">
       <h2>⚙️ Settings</h2>
       
       <div class="settings-section">
-        <h3>Appearance</h3>
+        <h3>🎨 Appearance</h3>
         <div class="setting-item">
           <label>Theme</label>
           <select id="themeSelect" onchange="changeTheme()">
@@ -219,6 +247,17 @@
 
       <div class="settings-section">
         <h3>👤 Profile</h3>
+        <div class="setting-item">
+          <label>Profile Picture</label>
+          <div class="avatar-upload">
+            <div class="avatar-preview" id="avatarPreview">
+              <span id="avatarPreviewText">?</span>
+            </div>
+            <input type="file" id="avatarUpload" accept="image/*" onchange="uploadAvatar()" style="display: none;">
+            <button onclick="document.getElementById('avatarUpload').click()">Choose Image</button>
+            <button onclick="removeAvatar()">Remove</button>
+          </div>
+        </div>
         <div class="setting-item">
           <label>Display Name</label>
           <input type="text" id="profileDisplayName" placeholder="Your display name" onchange="updateProfile()">
